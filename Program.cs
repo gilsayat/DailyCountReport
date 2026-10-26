@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Drawing;
 using System.Linq;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
@@ -78,6 +79,8 @@ namespace DailyCountReport
         private Button btnBrowseExcel = null!;
         private Button btnBrowseTally = null!;
         private Button btnGenerate = null!;
+        private Button btnOpenExcel = null!;
+        private Label lblVoyageStatus = null!;
         private ListBox lstLog = null!;
 
         private readonly Color darkBg = Color.FromArgb(32, 33, 36);
@@ -90,41 +93,48 @@ namespace DailyCountReport
         {
             InitializeCustomComponent();
             SetupDragAndDrop();
+            ValidateVoyageMatch();
         }
 
         private void InitializeCustomComponent()
         {
             this.Text = "Daily Count Report Generator";
-            this.Size = new Size(560, 480);
-            this.MinimumSize = new Size(520, 440);
+            this.Size = new Size(580, 520);
+            this.MinimumSize = new Size(540, 480);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = darkBg;
             this.ForeColor = textWhite;
             this.Font = new Font("Segoe UI", 9.5f);
 
             Label lblDay = new Label { Text = "Report Day Sheet:", Location = new Point(20, 20), AutoSize = true, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
-            cmbDay = new ComboBox { Location = new Point(160, 18), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbDay = new ComboBox { Location = new Point(160, 18), Width = 140, DropDownStyle = ComboBoxStyle.DropDownList };
             for (int i = 1; i <= 8; i++) cmbDay.Items.Add($"DAY {i}");
             cmbDay.SelectedIndex = 0;
 
-            Label lblExcel = new Label { Text = "Excel Master File (.xlsx) - [Drag & Drop Supported]:", Location = new Point(20, 65), AutoSize = true, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
-            txtExcelPath = new TextBox { Location = new Point(20, 90), Width = 395, Text = settings.LastExcelPath };
-            btnBrowseExcel = new Button { Text = "Browse...", Location = new Point(425, 88), Width = 95, Height = 28, BackColor = panelBg, ForeColor = textWhite, FlatStyle = FlatStyle.Flat };
+            lblVoyageStatus = new Label { Text = "Voyage: Ready", Location = new Point(315, 21), AutoSize = true, ForeColor = Color.LightGray, Font = new Font("Segoe UI", 9f, FontStyle.Italic) };
+
+            Label lblExcel = new Label { Text = "Excel Master File (.xlsx) - [Drag & Drop]:", Location = new Point(20, 65), AutoSize = true, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+            txtExcelPath = new TextBox { Location = new Point(20, 90), Width = 415, Text = settings.LastExcelPath };
+            btnBrowseExcel = new Button { Text = "Browse...", Location = new Point(445, 88), Width = 95, Height = 28, BackColor = panelBg, ForeColor = textWhite, FlatStyle = FlatStyle.Flat };
             btnBrowseExcel.Click += (s, e) => BrowseExcelFile();
 
-            Label lblTally = new Label { Text = "Tally Data File (.txt or .ps1) - [Drag & Drop Supported]:", Location = new Point(20, 130), AutoSize = true, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
-            txtTallyPath = new TextBox { Location = new Point(20, 155), Width = 395, Text = settings.LastTallyPath };
-            btnBrowseTally = new Button { Text = "Browse...", Location = new Point(425, 153), Width = 95, Height = 28, BackColor = panelBg, ForeColor = textWhite, FlatStyle = FlatStyle.Flat };
+            Label lblTally = new Label { Text = "Tally Data File (.txt or .ps1) - [Drag & Drop]:", Location = new Point(20, 130), AutoSize = true, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+            txtTallyPath = new TextBox { Location = new Point(20, 155), Width = 415, Text = settings.LastTallyPath };
+            btnBrowseTally = new Button { Text = "Browse...", Location = new Point(445, 153), Width = 95, Height = 28, BackColor = panelBg, ForeColor = textWhite, FlatStyle = FlatStyle.Flat };
             btnBrowseTally.Click += (s, e) => BrowseTallyFile();
 
-            btnGenerate = new Button { Text = "Generate & Update Excel Report", Location = new Point(20, 200), Width = 500, Height = 42, BackColor = accentGreen, ForeColor = textWhite, Font = new Font("Segoe UI", 11f, FontStyle.Bold), FlatStyle = FlatStyle.Flat };
+            btnGenerate = new Button { Text = "⚡ Generate & Update Excel Report", Location = new Point(20, 200), Width = 385, Height = 42, BackColor = accentGreen, ForeColor = textWhite, Font = new Font("Segoe UI", 11f, FontStyle.Bold), FlatStyle = FlatStyle.Flat };
             btnGenerate.Click += (s, e) => RunReportGeneration();
 
+            btnOpenExcel = new Button { Text = "Open File", Location = new Point(415, 200), Width = 125, Height = 42, BackColor = accentBlue, ForeColor = textWhite, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), FlatStyle = FlatStyle.Flat, Enabled = File.Exists(settings.LastExcelPath) };
+            btnOpenExcel.Click += (s, e) => OpenExcelWorkbook();
+
             Label lblLog = new Label { Text = "Status Log:", Location = new Point(20, 255), AutoSize = true, ForeColor = Color.LightGray };
-            lstLog = new ListBox { Location = new Point(20, 280), Width = 500, Height = 140, BackColor = panelBg, ForeColor = Color.LightGreen, Font = new Font("Consolas", 8.5f) };
+            lstLog = new ListBox { Location = new Point(20, 280), Width = 520, Height = 175, BackColor = panelBg, ForeColor = Color.LightGreen, Font = new Font("Consolas", 8.5f) };
 
             this.Controls.Add(lblDay);
             this.Controls.Add(cmbDay);
+            this.Controls.Add(lblVoyageStatus);
             this.Controls.Add(lblExcel);
             this.Controls.Add(txtExcelPath);
             this.Controls.Add(btnBrowseExcel);
@@ -132,6 +142,7 @@ namespace DailyCountReport
             this.Controls.Add(txtTallyPath);
             this.Controls.Add(btnBrowseTally);
             this.Controls.Add(btnGenerate);
+            this.Controls.Add(btnOpenExcel);
             this.Controls.Add(lblLog);
             this.Controls.Add(lstLog);
         }
@@ -158,7 +169,9 @@ namespace DailyCountReport
                             txtExcelPath.Text = file;
                             settings.LastExcelPath = file;
                             settings.Save();
+                            btnOpenExcel.Enabled = true;
                             Log($"Loaded Excel workbook: {Path.GetFileName(file)}");
+                            ValidateVoyageMatch();
                         }
                         else if (ext == ".txt" || ext == ".ps1")
                         {
@@ -183,7 +196,9 @@ namespace DailyCountReport
                 txtExcelPath.Text = ofd.FileName;
                 settings.LastExcelPath = ofd.FileName;
                 settings.Save();
+                btnOpenExcel.Enabled = true;
                 Log($"Selected Excel: {Path.GetFileName(ofd.FileName)}");
+                ValidateVoyageMatch();
             }
         }
 
@@ -207,7 +222,7 @@ namespace DailyCountReport
             if (detectedDay >= 1 && detectedDay <= 8)
             {
                 cmbDay.SelectedItem = $"DAY {detectedDay}";
-                Log($"Auto-switched target sheet to [DAY {detectedDay}] based on filename.");
+                Log($"Auto-detected target sheet: [DAY {detectedDay}]");
             }
 
             if (string.IsNullOrWhiteSpace(txtExcelPath.Text) || !File.Exists(txtExcelPath.Text))
@@ -222,9 +237,51 @@ namespace DailyCountReport
                         txtExcelPath.Text = found;
                         settings.LastExcelPath = found;
                         settings.Save();
-                        Log($"Auto-detected Excel workbook: {Path.GetFileName(found)}");
+                        btnOpenExcel.Enabled = true;
+                        Log($"Auto-detected matching Excel file: {Path.GetFileName(found)}");
                     }
                 }
+            }
+            ValidateVoyageMatch();
+        }
+
+        private void ValidateVoyageMatch()
+        {
+            try
+            {
+                if (File.Exists(txtTallyPath.Text) && File.Exists(txtExcelPath.Text))
+                {
+                    string tallyName = Path.GetFileName(txtTallyPath.Text);
+                    string excelName = Path.GetFileName(txtExcelPath.Text);
+
+                    var m1 = Regex.Match(tallyName, @"([A-Z]{2}\d{6})", RegexOptions.IgnoreCase);
+                    var m2 = Regex.Match(excelName, @"([A-Z]{2}\d{6})", RegexOptions.IgnoreCase);
+
+                    if (m1.Success && m2.Success && m1.Value.Equals(m2.Value, StringComparison.OrdinalIgnoreCase))
+                    {
+                        lblVoyageStatus.Text = $"Voyage: {m1.Value.ToUpper()} (Matched ✓)";
+                        lblVoyageStatus.ForeColor = Color.FromArgb(120, 240, 150);
+                        return;
+                    }
+                }
+            }
+            catch { }
+            lblVoyageStatus.Text = "Voyage: Ready";
+            lblVoyageStatus.ForeColor = Color.LightGray;
+        }
+
+        private void OpenExcelWorkbook()
+        {
+            try
+            {
+                if (File.Exists(txtExcelPath.Text))
+                {
+                    Process.Start(new ProcessStartInfo { FileName = txtExcelPath.Text, UseShellExecute = true });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not open file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -271,7 +328,7 @@ namespace DailyCountReport
             {
                 var dr = MessageBox.Show(
                     $"Day Mismatch Detected!\n\n" +
-                    $"The tally file appears to be for [DAY {detectedDay}], but you currently have [{selectedDay}] selected.\n\n" +
+                    $"The tally file appears to be for [DAY {detectedDay}], but you selected [{selectedDay}].\n\n" +
                     $"Click 'Yes' to automatically switch to [DAY {detectedDay}].\n" +
                     $"Click 'No' to proceed with [{selectedDay}].\n" +
                     $"Click 'Cancel' to abort.",
@@ -294,28 +351,6 @@ namespace DailyCountReport
                     return;
                 }
 
-                // Safeguard 2: Overwrite Protection check
-                bool hasExistingData = !ws.Cell(4, 8).IsEmpty() || !ws.Cell(4, 15).IsEmpty();
-                if (hasExistingData)
-                {
-                    var confirm = MessageBox.Show(
-                        $"Worksheet '{selectedDay}' already contains data.\n\nDo you want to overwrite it?",
-                        "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                    if (confirm != DialogResult.Yes) return;
-                }
-
-                Log($"Reading data from [{Path.GetFileName(tallyPath)}]...");
-                var items = ParseTallyFile(tallyPath);
-                Log($"Found {items.Count} photo assignments.");
-
-                // Map photo numbers (P01-P18) to rows in the primary block (rows 4 to 18)
-                var slotRowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                for (int r = 4; r <= 18; r++)
-                {
-                    string slotVal = ws.Cell(r, 7).GetString().Trim();
-                    if (!string.IsNullOrEmpty(slotVal)) slotRowMap[slotVal] = r;
-                }
-
                 // Locate the dynamic TOTAL row
                 int totalRow = 24;
                 for (int r = 18; r <= 35; r++)
@@ -327,20 +362,71 @@ namespace DailyCountReport
                     }
                 }
 
+                // Safeguard 2: Overwrite Protection check
+                bool hasExistingData = !ws.Cell(4, 8).IsEmpty() || !ws.Cell(4, 15).IsEmpty();
+                if (hasExistingData)
+                {
+                    var confirm = MessageBox.Show(
+                        $"Worksheet '{selectedDay}' already contains data.\n\nDo you want to clear and overwrite it with the updated tally?",
+                        "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    if (confirm != DialogResult.Yes) return;
+
+                    Log($"Clearing previous report data on [{selectedDay}]...");
+
+                    // 1. Clear data columns in primary block (rows 4 to 18)
+                    for (int r = 4; r <= 18; r++)
+                    {
+                        ws.Cell(r, 8).Clear();   // Left count
+                        ws.Cell(r, 9).Clear();   // Left string
+                        ws.Cell(r, 14).Clear();  // Session
+                        ws.Cell(r, 15).Clear();  // Right count
+                        ws.Cell(r, 16).Clear();  // Right string
+                    }
+
+                    // 2. Completely clear secondary rows (row 19 up to totalRow - 1)
+                    for (int r = 19; r < totalRow; r++)
+                    {
+                        for (int c = 5; c <= 16; c++) ws.Cell(r, c).Clear();
+                    }
+
+                    // 3. Reset total row and summary figures
+                    ws.Cell(totalRow, 8).Clear();
+                    ws.Cell(totalRow, 15).Clear();
+                    ws.Cell(7, 2).Clear();
+                    ws.Cell(11, 2).Clear();
+                    ws.Cell(13, 2).Clear();
+                    ws.Cell(15, 2).Clear();
+                }
+
+                Log($"Parsing assignments from [{Path.GetFileName(tallyPath)}]...");
+                var items = ParseTallyFile(tallyPath);
+                Log($"Found {items.Count} items.");
+
+                // Map photo numbers (P01-P18) to rows in the primary block
+                var slotRowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int r = 4; r <= 18; r++)
+                {
+                    string slotVal = ws.Cell(r, 7).GetString().Trim();
+                    if (!string.IsNullOrEmpty(slotVal)) slotRowMap[slotVal] = r;
+                }
+
                 int totalLeftCount = 0;
                 int totalRightCount = 0;
                 int sum5x7 = 0;
                 int sum6x9 = 0;
-                int nextSecondaryRow = 19;
+
+                // Row 19 stays completely blank as a clean separator.
+                // Night event shifts on the left start at row 20.
+                int nextSecondaryRow = 20;
 
                 foreach (var item in items)
                 {
+                    if (item.FileCount == 0 && string.IsNullOrWhiteSpace(item.RawString))
+                        continue;
+
                     if (item.IsRightSide8x10)
                     {
-                        // Right side:
-                        // Col N (14) = Session (Count / 8) -> Centered
-                        // Col O (15) = Count -> Right-aligned
-                        // Col P (16) = RawString -> Left-aligned
+                        // Right side: Col N (14) = Session, Col O (15) = Count, Col P (16) = RawString
                         if (slotRowMap.TryGetValue(item.PhotoSlot, out int targetRow))
                         {
                             int sessionVal = (int)Math.Round((double)item.FileCount / 8.0);
@@ -359,47 +445,43 @@ namespace DailyCountReport
 
                         if (slotRowMap.TryGetValue(item.PhotoSlot, out int targetRow))
                         {
-                            // Rule: Night Event 5x7/6x9 items bypass the primary block and go to row 19+
+                            // Day Event items go into primary rows (4 to 18)
                             if (!item.IsNightEvent && ws.Cell(targetRow, 8).IsEmpty() && ws.Cell(targetRow, 9).IsEmpty())
                             {
-                                // Col H (8) = Count -> Right-aligned
-                                // Col I (9) = RawString -> Left-aligned
                                 SetStyledCell(ws.Cell(targetRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
                                 SetStyledCell(ws.Cell(targetRow, 9), item.RawString, XLAlignmentHorizontalValues.Left);
                             }
                             else
                             {
-                                // Place into secondary rows (below row 18, above TOTAL)
-                                if (nextSecondaryRow < totalRow)
+                                // Night Event items go to secondary rows starting from Row 20
+                                if (nextSecondaryRow >= totalRow)
                                 {
-                                    // Col E (5) = Name -> Centered
-                                    // Col F (6) = Crew ID -> Centered
-                                    // Col G (7) = Slot -> Centered
-                                    // Col H (8) = Count -> Right-aligned
-                                    // Col I (9) = RawString -> Left-aligned
-                                    SetStyledCell(ws.Cell(nextSecondaryRow, 5), ws.Cell(targetRow, 5).Value, XLAlignmentHorizontalValues.Center);
-                                    SetStyledCell(ws.Cell(nextSecondaryRow, 6), ws.Cell(targetRow, 6).Value, XLAlignmentHorizontalValues.Center);
-                                    SetStyledCell(ws.Cell(nextSecondaryRow, 7), item.PhotoSlot, XLAlignmentHorizontalValues.Center);
-                                    SetStyledCell(ws.Cell(nextSecondaryRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
-                                    SetStyledCell(ws.Cell(nextSecondaryRow, 9), item.RawString, XLAlignmentHorizontalValues.Left);
-                                    nextSecondaryRow++;
+                                    ws.Row(totalRow).InsertRowsAbove(1);
+                                    totalRow++;
                                 }
+
+                                SetStyledCell(ws.Cell(nextSecondaryRow, 5), ws.Cell(targetRow, 5).Value, XLAlignmentHorizontalValues.Center);
+                                SetStyledCell(ws.Cell(nextSecondaryRow, 6), ws.Cell(targetRow, 6).Value, XLAlignmentHorizontalValues.Center);
+                                SetStyledCell(ws.Cell(nextSecondaryRow, 7), item.PhotoSlot, XLAlignmentHorizontalValues.Center);
+                                SetStyledCell(ws.Cell(nextSecondaryRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
+                                SetStyledCell(ws.Cell(nextSecondaryRow, 9), item.RawString, XLAlignmentHorizontalValues.Left);
+                                nextSecondaryRow++;
                             }
                         }
                     }
                 }
 
-                // Bottom TOTAL row: Col H and Col O -> Right-aligned
+                // Bottom TOTAL row: Direct sum placement
                 SetStyledCell(ws.Cell(totalRow, 8), totalLeftCount, XLAlignmentHorizontalValues.Right);
                 SetStyledCell(ws.Cell(totalRow, 15), totalRightCount, XLAlignmentHorizontalValues.Right);
 
-                // Update side summary totals in Column B -> Right-aligned
-                SetStyledCell(ws.Cell(11, 2), sum5x7, XLAlignmentHorizontalValues.Right);                         // 5x7
-                SetStyledCell(ws.Cell(13, 2), sum6x9, XLAlignmentHorizontalValues.Right);                         // 6x9
-                SetStyledCell(ws.Cell(15, 2), totalRightCount, XLAlignmentHorizontalValues.Right);                // 8x10
-                SetStyledCell(ws.Cell(7, 2), totalLeftCount + totalRightCount, XLAlignmentHorizontalValues.Right); // Grand Total
+                // Side Summary Totals (Column B)
+                SetStyledCell(ws.Cell(11, 2), sum5x7, XLAlignmentHorizontalValues.Right);
+                SetStyledCell(ws.Cell(13, 2), sum6x9, XLAlignmentHorizontalValues.Right);
+                SetStyledCell(ws.Cell(15, 2), totalRightCount, XLAlignmentHorizontalValues.Right);
+                SetStyledCell(ws.Cell(7, 2), totalLeftCount + totalRightCount, XLAlignmentHorizontalValues.Right);
 
-                // Page setup for printing: Landscape, Narrow Margins, Fit to 1 Page Wide
+                // Print Page Setup: Landscape, Narrow Margins, Fit to 1 Page Wide
                 var pageSetup = ws.PageSetup;
                 pageSetup.PageOrientation = XLPageOrientation.Landscape;
                 pageSetup.PagesWide = 1;
@@ -411,9 +493,10 @@ namespace DailyCountReport
 
                 workbook.Save();
 
-                Log($"Updated {selectedDay} successfully!");
-                Log($"Left Total (Col H): {totalLeftCount} | Right Total (Col O): {totalRightCount}");
+                Log($"✓ Updated [{selectedDay}] successfully!");
+                Log($"Left Total: {totalLeftCount} | Right Total: {totalRightCount}");
                 Log($"5x7: {sum5x7} | 6x9: {sum6x9} | Grand Total: {totalLeftCount + totalRightCount}");
+                btnOpenExcel.Enabled = true;
 
                 MessageBox.Show($"Report for {selectedDay} generated successfully!\n\n" +
                                 $"Left File Count: {totalLeftCount}\n" +
