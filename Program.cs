@@ -302,6 +302,13 @@ namespace DailyCountReport
             cell.Style.Font.SetBold(true);
             cell.Style.Alignment.SetHorizontal(hAlign);
             cell.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+            cell.Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
+        }
+
+        private void ClearValueKeepBorder(IXLCell cell)
+        {
+            cell.Clear(XLClearOptions.Contents);
+            cell.Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
         }
 
         private void RunReportGeneration()
@@ -322,7 +329,6 @@ namespace DailyCountReport
                 return;
             }
 
-            // Safeguard 1: Day mismatch check
             int detectedDay = ExtractDayNumber(tallyPath);
             if (detectedDay >= 1 && detectedDay <= 8 && selectedDay != $"DAY {detectedDay}")
             {
@@ -351,9 +357,8 @@ namespace DailyCountReport
                     return;
                 }
 
-                // Locate the dynamic TOTAL row
                 int totalRow = 24;
-                for (int r = 18; r <= 35; r++)
+                for (int r = 18; r <= 45; r++)
                 {
                     if (ws.Cell(r, 5).GetString().Trim().Equals("TOTAL", StringComparison.OrdinalIgnoreCase))
                     {
@@ -362,7 +367,6 @@ namespace DailyCountReport
                     }
                 }
 
-                // Safeguard 2: Overwrite Protection check
                 bool hasExistingData = !ws.Cell(4, 8).IsEmpty() || !ws.Cell(4, 15).IsEmpty();
                 if (hasExistingData)
                 {
@@ -371,38 +375,37 @@ namespace DailyCountReport
                         "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                     if (confirm != DialogResult.Yes) return;
 
-                    Log($"Clearing previous report data on [{selectedDay}]...");
+                    Log($"Clearing contents (preserving borders) on [{selectedDay}]...");
 
-                    // 1. Clear data columns in primary block (rows 4 to 18)
                     for (int r = 4; r <= 18; r++)
                     {
-                        ws.Cell(r, 8).Clear();   // Left count
-                        ws.Cell(r, 9).Clear();   // Left string
-                        ws.Cell(r, 14).Clear();  // Session
-                        ws.Cell(r, 15).Clear();  // Right count
-                        ws.Cell(r, 16).Clear();  // Right string
+                        ClearValueKeepBorder(ws.Cell(r, 8));   // Left count
+                        ClearValueKeepBorder(ws.Cell(r, 9));   // Left string
+                        ClearValueKeepBorder(ws.Cell(r, 14));  // Session
+                        ClearValueKeepBorder(ws.Cell(r, 15));  // Right count
+                        ClearValueKeepBorder(ws.Cell(r, 16));  // Right string
                     }
 
-                    // 2. Completely clear secondary rows (row 19 up to totalRow - 1)
                     for (int r = 19; r < totalRow; r++)
                     {
-                        for (int c = 5; c <= 16; c++) ws.Cell(r, c).Clear();
+                        for (int c = 5; c <= 16; c++)
+                        {
+                            ClearValueKeepBorder(ws.Cell(r, c));
+                        }
                     }
 
-                    // 3. Reset total row and summary figures
-                    ws.Cell(totalRow, 8).Clear();
-                    ws.Cell(totalRow, 15).Clear();
-                    ws.Cell(7, 2).Clear();
-                    ws.Cell(11, 2).Clear();
-                    ws.Cell(13, 2).Clear();
-                    ws.Cell(15, 2).Clear();
+                    ClearValueKeepBorder(ws.Cell(totalRow, 8));
+                    ClearValueKeepBorder(ws.Cell(totalRow, 15));
+                    ClearValueKeepBorder(ws.Cell(7, 2));
+                    ClearValueKeepBorder(ws.Cell(11, 2));
+                    ClearValueKeepBorder(ws.Cell(13, 2));
+                    ClearValueKeepBorder(ws.Cell(15, 2));
                 }
 
                 Log($"Parsing assignments from [{Path.GetFileName(tallyPath)}]...");
                 var items = ParseTallyFile(tallyPath);
                 Log($"Found {items.Count} items.");
 
-                // Map photo numbers (P01-P18) to rows in the primary block
                 var slotRowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 for (int r = 4; r <= 18; r++)
                 {
@@ -415,8 +418,6 @@ namespace DailyCountReport
                 int sum5x7 = 0;
                 int sum6x9 = 0;
 
-                // Row 19 stays completely blank as a clean separator.
-                // Night event shifts on the left start at row 20.
                 int nextSecondaryRow = 20;
 
                 foreach (var item in items)
@@ -426,7 +427,6 @@ namespace DailyCountReport
 
                     if (item.IsRightSide8x10)
                     {
-                        // Right side: Col N (14) = Session, Col O (15) = Count, Col P (16) = RawString
                         if (slotRowMap.TryGetValue(item.PhotoSlot, out int targetRow))
                         {
                             int sessionVal = (int)Math.Round((double)item.FileCount / 8.0);
@@ -438,14 +438,12 @@ namespace DailyCountReport
                     }
                     else
                     {
-                        // Left side (5x7 & 6x9)
                         if (item.Is5x7) sum5x7 += item.FileCount;
                         if (item.Is6x9) sum6x9 += item.FileCount;
                         totalLeftCount += item.FileCount;
 
                         if (slotRowMap.TryGetValue(item.PhotoSlot, out int targetRow))
                         {
-                            // Day Event items go into primary rows (4 to 18)
                             if (!item.IsNightEvent && ws.Cell(targetRow, 8).IsEmpty() && ws.Cell(targetRow, 9).IsEmpty())
                             {
                                 SetStyledCell(ws.Cell(targetRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
@@ -453,7 +451,6 @@ namespace DailyCountReport
                             }
                             else
                             {
-                                // Night Event items go to secondary rows starting from Row 20
                                 if (nextSecondaryRow >= totalRow)
                                 {
                                     ws.Row(totalRow).InsertRowsAbove(1);
@@ -465,23 +462,24 @@ namespace DailyCountReport
                                 SetStyledCell(ws.Cell(nextSecondaryRow, 7), item.PhotoSlot, XLAlignmentHorizontalValues.Center);
                                 SetStyledCell(ws.Cell(nextSecondaryRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
                                 SetStyledCell(ws.Cell(nextSecondaryRow, 9), item.RawString, XLAlignmentHorizontalValues.Left);
+
+                                for (int c = 10; c <= 16; c++)
+                                    ws.Cell(nextSecondaryRow, c).Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
+
                                 nextSecondaryRow++;
                             }
                         }
                     }
                 }
 
-                // Bottom TOTAL row: Direct sum placement
                 SetStyledCell(ws.Cell(totalRow, 8), totalLeftCount, XLAlignmentHorizontalValues.Right);
                 SetStyledCell(ws.Cell(totalRow, 15), totalRightCount, XLAlignmentHorizontalValues.Right);
 
-                // Side Summary Totals (Column B)
                 SetStyledCell(ws.Cell(11, 2), sum5x7, XLAlignmentHorizontalValues.Right);
                 SetStyledCell(ws.Cell(13, 2), sum6x9, XLAlignmentHorizontalValues.Right);
                 SetStyledCell(ws.Cell(15, 2), totalRightCount, XLAlignmentHorizontalValues.Right);
                 SetStyledCell(ws.Cell(7, 2), totalLeftCount + totalRightCount, XLAlignmentHorizontalValues.Right);
 
-                // Print Page Setup: Landscape, Narrow Margins, Fit to 1 Page Wide
                 var pageSetup = ws.PageSetup;
                 pageSetup.PageOrientation = XLPageOrientation.Landscape;
                 pageSetup.PagesWide = 1;
