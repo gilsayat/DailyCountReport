@@ -203,7 +203,6 @@ namespace DailyCountReport
             settings.Save();
             Log($"Loaded Tally: {Path.GetFileName(filePath)}");
 
-            // Smart day auto-detection from filename
             int detectedDay = ExtractDayNumber(filePath);
             if (detectedDay >= 1 && detectedDay <= 8)
             {
@@ -211,7 +210,6 @@ namespace DailyCountReport
                 Log($"Auto-switched target sheet to [DAY {detectedDay}] based on filename.");
             }
 
-            // Auto-discover workbook in same folder if not set or missing
             if (string.IsNullOrWhiteSpace(txtExcelPath.Text) || !File.Exists(txtExcelPath.Text))
             {
                 string dir = Path.GetDirectoryName(filePath) ?? "";
@@ -224,7 +222,7 @@ namespace DailyCountReport
                         txtExcelPath.Text = found;
                         settings.LastExcelPath = found;
                         settings.Save();
-                        Log($"Auto-detected Excel workbook in directory: {Path.GetFileName(found)}");
+                        Log($"Auto-detected Excel workbook: {Path.GetFileName(found)}");
                     }
                 }
             }
@@ -241,11 +239,11 @@ namespace DailyCountReport
             return 0;
         }
 
-        private void SetBoldCenter(IXLCell cell, object val)
+        private void SetStyledCell(IXLCell cell, object val, XLAlignmentHorizontalValues hAlign)
         {
             cell.Value = XLCellValue.FromObject(val);
             cell.Style.Font.SetBold(true);
-            cell.Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            cell.Style.Alignment.SetHorizontal(hAlign);
             cell.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
         }
 
@@ -339,13 +337,16 @@ namespace DailyCountReport
                 {
                     if (item.IsRightSide8x10)
                     {
-                        // Right side: Col N (14) = Session (Count / 8), Col O (15) = Count, Col P (16) = RawString
+                        // Right side:
+                        // Col N (14) = Session (Count / 8) -> Centered
+                        // Col O (15) = Count -> Right-aligned
+                        // Col P (16) = RawString -> Left-aligned
                         if (slotRowMap.TryGetValue(item.PhotoSlot, out int targetRow))
                         {
                             int sessionVal = (int)Math.Round((double)item.FileCount / 8.0);
-                            SetBoldCenter(ws.Cell(targetRow, 14), sessionVal);
-                            SetBoldCenter(ws.Cell(targetRow, 15), item.FileCount);
-                            SetBoldCenter(ws.Cell(targetRow, 16), item.RawString);
+                            SetStyledCell(ws.Cell(targetRow, 14), sessionVal, XLAlignmentHorizontalValues.Center);
+                            SetStyledCell(ws.Cell(targetRow, 15), item.FileCount, XLAlignmentHorizontalValues.Right);
+                            SetStyledCell(ws.Cell(targetRow, 16), item.RawString, XLAlignmentHorizontalValues.Left);
                             totalRightCount += item.FileCount;
                         }
                     }
@@ -361,19 +362,26 @@ namespace DailyCountReport
                             // Rule: Night Event 5x7/6x9 items bypass the primary block and go to row 19+
                             if (!item.IsNightEvent && ws.Cell(targetRow, 8).IsEmpty() && ws.Cell(targetRow, 9).IsEmpty())
                             {
-                                SetBoldCenter(ws.Cell(targetRow, 8), item.FileCount);
-                                SetBoldCenter(ws.Cell(targetRow, 9), item.RawString);
+                                // Col H (8) = Count -> Right-aligned
+                                // Col I (9) = RawString -> Left-aligned
+                                SetStyledCell(ws.Cell(targetRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
+                                SetStyledCell(ws.Cell(targetRow, 9), item.RawString, XLAlignmentHorizontalValues.Left);
                             }
                             else
                             {
                                 // Place into secondary rows (below row 18, above TOTAL)
                                 if (nextSecondaryRow < totalRow)
                                 {
-                                    SetBoldCenter(ws.Cell(nextSecondaryRow, 5), ws.Cell(targetRow, 5).Value);
-                                    SetBoldCenter(ws.Cell(nextSecondaryRow, 6), ws.Cell(targetRow, 6).Value);
-                                    SetBoldCenter(ws.Cell(nextSecondaryRow, 7), item.PhotoSlot);
-                                    SetBoldCenter(ws.Cell(nextSecondaryRow, 8), item.FileCount);
-                                    SetBoldCenter(ws.Cell(nextSecondaryRow, 9), item.RawString);
+                                    // Col E (5) = Name -> Centered
+                                    // Col F (6) = Crew ID -> Centered
+                                    // Col G (7) = Slot -> Centered
+                                    // Col H (8) = Count -> Right-aligned
+                                    // Col I (9) = RawString -> Left-aligned
+                                    SetStyledCell(ws.Cell(nextSecondaryRow, 5), ws.Cell(targetRow, 5).Value, XLAlignmentHorizontalValues.Center);
+                                    SetStyledCell(ws.Cell(nextSecondaryRow, 6), ws.Cell(targetRow, 6).Value, XLAlignmentHorizontalValues.Center);
+                                    SetStyledCell(ws.Cell(nextSecondaryRow, 7), item.PhotoSlot, XLAlignmentHorizontalValues.Center);
+                                    SetStyledCell(ws.Cell(nextSecondaryRow, 8), item.FileCount, XLAlignmentHorizontalValues.Right);
+                                    SetStyledCell(ws.Cell(nextSecondaryRow, 9), item.RawString, XLAlignmentHorizontalValues.Left);
                                     nextSecondaryRow++;
                                 }
                             }
@@ -381,15 +389,15 @@ namespace DailyCountReport
                     }
                 }
 
-                // Place total counts directly into the TOTAL row
-                SetBoldCenter(ws.Cell(totalRow, 8), totalLeftCount);
-                SetBoldCenter(ws.Cell(totalRow, 15), totalRightCount);
+                // Bottom TOTAL row: Col H and Col O -> Right-aligned
+                SetStyledCell(ws.Cell(totalRow, 8), totalLeftCount, XLAlignmentHorizontalValues.Right);
+                SetStyledCell(ws.Cell(totalRow, 15), totalRightCount, XLAlignmentHorizontalValues.Right);
 
-                // Update side summary totals in Column B
-                SetBoldCenter(ws.Cell(11, 2), sum5x7);                         // 5x7
-                SetBoldCenter(ws.Cell(13, 2), sum6x9);                         // 6x9
-                SetBoldCenter(ws.Cell(15, 2), totalRightCount);                // 8x10
-                SetBoldCenter(ws.Cell(7, 2), totalLeftCount + totalRightCount); // Grand Total
+                // Update side summary totals in Column B -> Right-aligned
+                SetStyledCell(ws.Cell(11, 2), sum5x7, XLAlignmentHorizontalValues.Right);                         // 5x7
+                SetStyledCell(ws.Cell(13, 2), sum6x9, XLAlignmentHorizontalValues.Right);                         // 6x9
+                SetStyledCell(ws.Cell(15, 2), totalRightCount, XLAlignmentHorizontalValues.Right);                // 8x10
+                SetStyledCell(ws.Cell(7, 2), totalLeftCount + totalRightCount, XLAlignmentHorizontalValues.Right); // Grand Total
 
                 // Page setup for printing: Landscape, Narrow Margins, Fit to 1 Page Wide
                 var pageSetup = ws.PageSetup;
@@ -433,7 +441,6 @@ namespace DailyCountReport
                 string tr = line.Trim();
                 if (string.IsNullOrWhiteSpace(tr)) continue;
 
-                // Track Day vs Night Event sections
                 if (tr.IndexOf("Night Event", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     isNightEvent = true;
