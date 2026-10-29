@@ -305,6 +305,15 @@ namespace DailyCountReport
             cell.Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
         }
 
+        private void SetFormulaStyledCell(IXLCell cell, string formula, XLAlignmentHorizontalValues hAlign)
+        {
+            cell.FormulaA1 = formula;
+            cell.Style.Font.SetBold(true);
+            cell.Style.Alignment.SetHorizontal(hAlign);
+            cell.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+            cell.Style.Border.SetOutsideBorder(XLBorderStyleValues.Thin);
+        }
+
         private void ClearValueKeepBorder(IXLCell cell)
         {
             cell.Clear(XLClearOptions.Contents);
@@ -413,8 +422,6 @@ namespace DailyCountReport
                     if (!string.IsNullOrEmpty(slotVal)) slotRowMap[slotVal] = r;
                 }
 
-                int totalLeftCount = 0;
-                int totalRightCount = 0;
                 int sum5x7 = 0;
                 int sum6x9 = 0;
 
@@ -433,14 +440,12 @@ namespace DailyCountReport
                             SetStyledCell(ws.Cell(targetRow, 14), sessionVal, XLAlignmentHorizontalValues.Center);
                             SetStyledCell(ws.Cell(targetRow, 15), item.FileCount, XLAlignmentHorizontalValues.Right);
                             SetStyledCell(ws.Cell(targetRow, 16), item.RawString, XLAlignmentHorizontalValues.Left);
-                            totalRightCount += item.FileCount;
                         }
                     }
                     else
                     {
                         if (item.Is5x7) sum5x7 += item.FileCount;
                         if (item.Is6x9) sum6x9 += item.FileCount;
-                        totalLeftCount += item.FileCount;
 
                         if (slotRowMap.TryGetValue(item.PhotoSlot, out int targetRow))
                         {
@@ -472,13 +477,17 @@ namespace DailyCountReport
                     }
                 }
 
-                SetStyledCell(ws.Cell(totalRow, 8), totalLeftCount, XLAlignmentHorizontalValues.Right);
-                SetStyledCell(ws.Cell(totalRow, 15), totalRightCount, XLAlignmentHorizontalValues.Right);
+                // Inject live dynamic math formulas for the total row (last row is 1 above totalRow, or r=totalRow-1)
+                int lastActiveRow = totalRow - 1;
+                SetFormulaStyledCell(ws.Cell(totalRow, 8), $"=SUM(H4:H{lastActiveRow})", XLAlignmentHorizontalValues.Right);
+                SetFormulaStyledCell(ws.Cell(totalRow, 14), $"=SUM(N4:N{lastActiveRow})", XLAlignmentHorizontalValues.Center);
+                SetFormulaStyledCell(ws.Cell(totalRow, 15), $"=SUM(O4:O{lastActiveRow})", XLAlignmentHorizontalValues.Right);
 
-                SetStyledCell(ws.Cell(11, 2), sum5x7, XLAlignmentHorizontalValues.Right);
-                SetStyledCell(ws.Cell(13, 2), sum6x9, XLAlignmentHorizontalValues.Right);
-                SetStyledCell(ws.Cell(15, 2), totalRightCount, XLAlignmentHorizontalValues.Right);
-                SetStyledCell(ws.Cell(7, 2), totalLeftCount + totalRightCount, XLAlignmentHorizontalValues.Right);
+                // Side Summary Totals (Column B) with live dynamic math formula, styled centered & bold
+                SetStyledCell(ws.Cell(11, 2), sum5x7, XLAlignmentHorizontalValues.Center);                                  // 5x7 Count
+                SetFormulaStyledCell(ws.Cell(13, 2), $"=H{totalRow}-B11", XLAlignmentHorizontalValues.Center);               // 6x9 Count
+                SetFormulaStyledCell(ws.Cell(15, 2), $"=O{totalRow}", XLAlignmentHorizontalValues.Center);                   // 8x10 Count
+                SetFormulaStyledCell(ws.Cell(7, 2), $"=H{totalRow}+O{totalRow}", XLAlignmentHorizontalValues.Center);         // Grand Total Count
 
                 var pageSetup = ws.PageSetup;
                 pageSetup.PageOrientation = XLPageOrientation.Landscape;
@@ -491,17 +500,11 @@ namespace DailyCountReport
 
                 workbook.Save();
 
-                Log($"✓ Updated [{selectedDay}] successfully!");
-                Log($"Left Total: {totalLeftCount} | Right Total: {totalRightCount}");
-                Log($"5x7: {sum5x7} | 6x9: {sum6x9} | Grand Total: {totalLeftCount + totalRightCount}");
+                Log($"✓ Updated [{selectedDay}] with active math formulas successfully!");
                 btnOpenExcel.Enabled = true;
 
-                MessageBox.Show($"Report for {selectedDay} generated successfully!\n\n" +
-                                $"Left File Count: {totalLeftCount}\n" +
-                                $"Right File Count: {totalRightCount}\n" +
-                                $"5x7 Total: {sum5x7}\n" +
-                                $"6x9 Total: {sum6x9}\n" +
-                                $"Grand Total: {totalLeftCount + totalRightCount}",
+                MessageBox.Show($"Report for {selectedDay} generated successfully with live Excel formulas!\n\n" +
+                                $"Please review the data sheet on your Excel workbook to ensure everything matches.",
                                 "Report Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
