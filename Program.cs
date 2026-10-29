@@ -105,6 +105,11 @@ namespace DailyCountReport
             this.BackColor = darkBg;
             this.ForeColor = textWhite;
             this.Font = new Font("Segoe UI", 9.5f);
+            string iconFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+if (File.Exists(iconFile))
+{
+    this.Icon = new Icon(iconFile);
+}
 
             Label lblDay = new Label { Text = "Report Day Sheet:", Location = new Point(20, 20), AutoSize = true, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
             cmbDay = new ComboBox { Location = new Point(160, 18), Width = 140, DropDownStyle = ComboBoxStyle.DropDownList };
