@@ -1,0 +1,38 @@
+name: Build Daily Count Report v1
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore Dependencies
+      run: dotnet restore
+
+    - name: Publish Standalone Executable
+      run: >
+        dotnet publish DailyCountReport.csproj
+        -c Release
+        -r win-x64
+        --self-contained false
+        /p:PublishSingleFile=true
+        /p:IncludeNativeLibrariesForSelfExtract=true
+        -o ./publish
+
+    - name: Upload DailyCountReport.exe Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: DailyCountReport v1
+        path: ./publish/DailyCountReport.exe
